@@ -70,7 +70,7 @@ Respond with ONLY valid JSON in this exact shape:
 Be concise. Max 2 warnings, max 2 suggestions. Only flag real problems, not stylistic ones. If the changes are fine, return empty warnings array and a positive suggestion.`;
 
   const message = await client.messages.create({
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-4-6",
     max_tokens: 512,
     messages: [{ role: "user", content: prompt }],
   });

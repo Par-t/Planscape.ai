@@ -10,7 +10,7 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const runtime = new CopilotRuntime();
 
-const serviceAdapter = new AnthropicAdapter({ anthropic: client, model: "claude-sonnet-4-5" });
+const serviceAdapter = new AnthropicAdapter({ anthropic: client, model: "claude-sonnet-4-6" });
 
 export const POST = async (req: NextRequest) => {
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
