@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import ReactFlow, {
   Background,
   Controls,
+  ConnectionLineType,
   MarkerType,
   Node,
   Edge,
@@ -31,7 +32,7 @@ interface GraphViewProps {
   onDeleteNode?: (nodeId: string) => void;
   onDeleteEdge?: (edgeId: string) => void;
   nodeAnnotations?: Record<string, NodeAnnotation>;
-  onAnnotationClick?: (info: { nodeId: string; label: string; status: string; reasons: string[] }) => void;
+  onAnnotationClick?: (info: { nodeId: string; label: string; status: "ok" | "warning" | "error"; reasons: string[] }) => void;
 }
 
 const nodeTypes = { custom: CustomNode };
@@ -119,7 +120,7 @@ export default function GraphView({
       edgeTypes={edgeTypes}
       defaultEdgeOptions={defaultEdgeOptions}
       connectionLineStyle={{ stroke: "#6366f1", strokeWidth: 3 }}
-      connectionLineType="smoothstep"
+      connectionLineType={ConnectionLineType.SmoothStep}
       fitView
       fitViewOptions={{ padding: 0.2 }}
       nodesDraggable={true}

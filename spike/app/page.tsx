@@ -158,7 +158,8 @@ export default function Home() {
       { name: "status", type: "string", description: "ok | warning | error", required: true },
       { name: "reason", type: "string", description: "Brief explanation of why this status was assigned", required: true },
     ],
-    handler: ({ nodeId, status, reason }: { nodeId: string; status: "ok" | "warning" | "error"; reason: string }) => {
+    handler: ({ nodeId, status: rawStatus, reason }: { nodeId: string; status: string; reason: string }) => {
+      const status = rawStatus as "ok" | "warning" | "error";
       console.log(`[flagNode] nodeId=${nodeId}, status=${status}, reason=${reason}`);
       const s = status === "error" ? nodeStyleError
         : status === "warning" ? nodeStyleWarning
@@ -173,7 +174,7 @@ export default function Home() {
       // Accumulate annotation
       setNodeAnnotations((prev) => {
         const existing = prev[nodeId];
-        const statusPriority = { error: 3, warning: 2, ok: 1 };
+        const statusPriority: Record<string, number> = { error: 3, warning: 2, ok: 1 };
         const newStatus = existing
           ? (statusPriority[status] > statusPriority[existing.status] ? status : existing.status)
           : status;
@@ -198,7 +199,7 @@ export default function Home() {
       { name: "type", type: "string", description: "warning | suggestion", required: true },
       { name: "message", type: "string", description: "The insight message to display", required: true },
     ],
-    handler: ({ type, message }: { type: "warning" | "suggestion"; message: string }) => {
+    handler: ({ type, message }: { type: string; message: string }) => {
       console.log(`[addInsight] type=${type}, message=${message}`);
       if (type === "warning") {
         setWarnings((prev) => [...prev, message]);
@@ -206,6 +207,54 @@ export default function Home() {
         setSuggestions((prev) => [...prev, message]);
       }
       return `Added ${type}: "${message}"`;
+    },
+  });
+
+  useCopilotAction({
+    name: "storeMemory",
+    description:
+      "Store a memory in long-term storage (Redis). Use this to persist analysis summaries " +
+      "so they can be recalled in future checks. Always call this after analyzing changes.",
+    parameters: [
+      { name: "text", type: "string", description: "The memory text to store (include session ID and check number)", required: true },
+    ],
+    handler: async ({ text }: { text: string }) => {
+      console.log(`[storeMemory] ${text}`);
+      try {
+        const res = await fetch("/api/memory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "store", text }),
+        });
+        const data = await res.json();
+        return data.ok ? `Memory stored: "${text}"` : `Failed to store: ${data.error}`;
+      } catch (e) {
+        return `Failed to store memory: ${e}`;
+      }
+    },
+  });
+
+  useCopilotAction({
+    name: "searchMemory",
+    description:
+      "Search long-term memory (Redis) for past analysis context. " +
+      "Call this before analyzing changes to check for recurring patterns.",
+    parameters: [
+      { name: "query", type: "string", description: "Search query (e.g. 'session <id> analysis')", required: true },
+    ],
+    handler: async ({ query }: { query: string }) => {
+      console.log(`[searchMemory] query=${query}`);
+      try {
+        const res = await fetch("/api/memory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "search", query }),
+        });
+        const data = await res.json();
+        return data.ok ? data.result : `Search failed: ${data.error}`;
+      } catch (e) {
+        return `Search failed: ${e}`;
+      }
     },
   });
 
@@ -262,12 +311,12 @@ CHANGES MADE:
 ${changes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
 
 INSTRUCTIONS:
-1. If memory tools are available, call search_long_term_memory with query "session ${sessionId} analysis" to check for past context.
+1. Call searchMemory with query "session ${sessionId} analysis" to check for past context.
 2. Analyze whether my changes break dependencies or create logical problems.
 3. For each affected node, call flagNode with the appropriate status ("ok", "warning", or "error") and a reason.
 4. Call addInsight for each warning or suggestion (max 2 warnings, max 2 suggestions).
-5. If memory tools are available, call create_long_term_memory to store a brief summary: "Session ${sessionId} Check ${checkNum}: [your summary]"
-6. If past analysis exists, note repeated patterns and escalate severity.
+5. Call storeMemory to persist a summary: "Session ${sessionId} Check ${checkNum}: [your summary of what changed and what you flagged]"
+6. If past analysis exists from searchMemory, note repeated patterns and escalate severity.
 7. Do NOT respond with plain text. Only use the tool calls above.`,
         })
       );
