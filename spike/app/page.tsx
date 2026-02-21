@@ -63,6 +63,23 @@ export default function Home() {
     reasons: string[];
   } | null>(null);
 
+  const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([]);
+  const [historyLen, setHistoryLen] = useState(0);
+
+  const pushHistory = useCallback(() => {
+    historyRef.current = [...historyRef.current.slice(-29), { nodes, edges }];
+    setHistoryLen(historyRef.current.length);
+  }, [nodes, edges]);
+
+  const handleUndo = useCallback(() => {
+    if (historyRef.current.length === 0) return;
+    const last = historyRef.current[historyRef.current.length - 1];
+    historyRef.current = historyRef.current.slice(0, -1);
+    setHistoryLen(historyRef.current.length);
+    setNodes(last.nodes);
+    setEdges(last.edges);
+  }, []);
+
   const [sessionId] = useState<string>(() => {
     if (typeof window === "undefined") return uuidv4();
     const stored = localStorage.getItem("minui-session-id");
@@ -85,6 +102,18 @@ export default function Home() {
     const changes = diffGraphs(confirmedGraph.current, current);
     setHasChanges(changes.length > 0);
   }, [nodes, edges]);
+
+  // Ctrl/Cmd+Z undo shortcut
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleUndo]);
 
   useCopilotReadable({
     description: "Current graph nodes and edges",
@@ -138,6 +167,7 @@ export default function Home() {
       }));
 
       const laid = applyDagreLayout(flowNodes, flowEdges);
+      pushHistory();
       setNodes(laid);
       setEdges(flowEdges);
       setLoading(false);
@@ -379,6 +409,7 @@ INSTRUCTIONS:
       ? { x: lastNode.position.x + 220, y: lastNode.position.y }
       : { x: 100, y: 100 };
 
+    pushHistory();
     setNodes((prev) => [
       ...prev,
       {
@@ -393,13 +424,15 @@ INSTRUCTIONS:
   };
 
   const handleDeleteNode = useCallback((nodeId: string) => {
+    pushHistory();
     setNodes((prev) => prev.filter((n) => n.id !== nodeId));
     setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
-  }, []);
+  }, [pushHistory]);
 
   const handleDeleteEdge = useCallback((edgeId: string) => {
+    pushHistory();
     setEdges((prev) => prev.filter((e) => e.id !== edgeId));
-  }, []);
+  }, [pushHistory]);
 
   const handleAnnotationClick = useCallback((info: { nodeId: string; label: string; status: "ok" | "warning" | "error"; reasons: string[] }) => {
     setActiveAnnotation(info);
@@ -522,13 +555,28 @@ INSTRUCTIONS:
         </div>
 
         <div className="flex-1 bg-zinc-900 relative">
-          <button
-            onClick={() => setShowAddNode(true)}
-            disabled={nodes.length === 0}
-            className="absolute top-4 right-4 z-20 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors shadow-lg"
-          >
-            + Add Node
-          </button>
+          <div className="absolute top-4 right-4 z-20 flex gap-2">
+            {historyLen > 0 && (
+              <button
+                onClick={handleUndo}
+                className="bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg px-3 py-2 text-sm font-medium transition-colors shadow-lg flex items-center gap-1.5"
+                title="Undo (Ctrl+Z)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+                Undo
+              </button>
+            )}
+            <button
+              onClick={() => setShowAddNode(true)}
+              disabled={nodes.length === 0}
+              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors shadow-lg"
+            >
+              + Add Node
+            </button>
+          </div>
           <GraphView
             nodes={nodes}
             edges={edges}
@@ -538,6 +586,7 @@ INSTRUCTIONS:
             onDeleteEdge={handleDeleteEdge}
             nodeAnnotations={nodeAnnotations}
             onAnnotationClick={handleAnnotationClick}
+            onBeforeChange={pushHistory}
           />
         </div>
 

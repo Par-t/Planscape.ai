@@ -33,6 +33,7 @@ interface GraphViewProps {
   onDeleteEdge?: (edgeId: string) => void;
   nodeAnnotations?: Record<string, NodeAnnotation>;
   onAnnotationClick?: (info: { nodeId: string; label: string; status: "ok" | "warning" | "error"; reasons: string[] }) => void;
+  onBeforeChange?: () => void;
 }
 
 const nodeTypes = { custom: CustomNode };
@@ -54,6 +55,7 @@ export default function GraphView({
   onDeleteEdge,
   nodeAnnotations,
   onAnnotationClick,
+  onBeforeChange,
 }: GraphViewProps) {
   if (nodes.length === 0) {
     return (
@@ -98,6 +100,7 @@ export default function GraphView({
   };
 
   const handleConnect = (connection: Connection) => {
+    onBeforeChange?.();
     const newEdge: Edge = {
       ...connection,
       id: `${connection.source}-${connection.target}-${connection.sourceHandle ?? "s"}-${connection.targetHandle ?? "t"}`,
@@ -116,6 +119,7 @@ export default function GraphView({
       onNodesChange={handleNodesChange}
       onEdgesChange={handleEdgesChange}
       onConnect={handleConnect}
+      onNodeDragStart={() => onBeforeChange?.()}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       defaultEdgeOptions={defaultEdgeOptions}
