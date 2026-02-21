@@ -5,7 +5,10 @@
       "Bash(npx tsc:*)",
       "WebFetch(domain:docs.copilotkit.ai)",
       "WebFetch(domain:github.com)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(curl:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker-compose:*)"
     ]
   }
 }

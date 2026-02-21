@@ -24,3 +24,18 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Custom node — no default React Flow handle dots */
+.custom-node-wrapper .react-flow__handle {
+  pointer-events: all;
+}
+
+/* While a connection is being dragged, make target handles accept drops */
+.react-flow__node.connectable .react-flow__handle.target {
+  pointer-events: all;
+}
+
+/* Source handle hover glow */
+.source-handle:hover {
+  box-shadow: 0 0 6px rgba(99, 102, 241, 0.8);
+}

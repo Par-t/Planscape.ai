@@ -1,9 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import ReactFlow, {
   Background,
   Controls,
-  MiniMap,
+  MarkerType,
   Node,
   Edge,
   Connection,
@@ -14,15 +15,45 @@ import ReactFlow, {
   EdgeChange,
 } from "reactflow";
 import "reactflow/dist/style.css";
+import CustomNode from "./custom-node";
+import CustomEdge from "./custom-edge";
+
+export interface NodeAnnotation {
+  status: "ok" | "warning" | "error";
+  reasons: string[];
+}
 
 interface GraphViewProps {
   nodes: Node[];
   edges: Edge[];
   onNodesChange: (nodes: Node[]) => void;
   onEdgesChange: (edges: Edge[]) => void;
+  onDeleteNode?: (nodeId: string) => void;
+  onDeleteEdge?: (edgeId: string) => void;
+  nodeAnnotations?: Record<string, NodeAnnotation>;
+  onAnnotationClick?: (info: { nodeId: string; label: string; status: string; reasons: string[] }) => void;
 }
 
-export default function GraphView({ nodes, edges, onNodesChange, onEdgesChange }: GraphViewProps) {
+const nodeTypes = { custom: CustomNode };
+const edgeTypes = { custom: CustomEdge };
+
+const defaultEdgeOptions = {
+  type: "custom",
+  animated: true,
+  markerEnd: { type: MarkerType.ArrowClosed, color: "#6366f1" },
+  style: { stroke: "#6366f1", strokeWidth: 3 },
+};
+
+export default function GraphView({
+  nodes,
+  edges,
+  onNodesChange,
+  onEdgesChange,
+  onDeleteNode,
+  onDeleteEdge,
+  nodeAnnotations,
+  onAnnotationClick,
+}: GraphViewProps) {
   if (nodes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-zinc-500 text-sm">
@@ -30,6 +61,32 @@ export default function GraphView({ nodes, edges, onNodesChange, onEdgesChange }
       </div>
     );
   }
+
+  // Enrich nodes with delete callback and annotation data
+  const enrichedNodes = useMemo(
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          onDelete: onDeleteNode,
+          onAnnotationClick,
+          annotation: nodeAnnotations?.[n.id],
+        },
+      })),
+    [nodes, onDeleteNode, onAnnotationClick, nodeAnnotations]
+  );
+
+  // Enrich edges with delete callback
+  const enrichedEdges = useMemo(
+    () =>
+      edges.map((e) => ({
+        ...e,
+        type: "custom",
+        data: { ...e.data, onDelete: onDeleteEdge },
+      })),
+    [edges, onDeleteEdge]
+  );
 
   const handleNodesChange = (changes: NodeChange[]) => {
     onNodesChange(applyNodeChanges(changes, nodes));
@@ -42,31 +99,37 @@ export default function GraphView({ nodes, edges, onNodesChange, onEdgesChange }
   const handleConnect = (connection: Connection) => {
     const newEdge: Edge = {
       ...connection,
-      id: `${connection.source}-${connection.target}`,
+      id: `${connection.source}-${connection.target}-${connection.sourceHandle ?? "s"}-${connection.targetHandle ?? "t"}`,
       animated: true,
-      style: { stroke: "#6366f1", strokeWidth: 2 },
-      type: "smoothstep",
+      style: { stroke: "#6366f1", strokeWidth: 3 },
+      type: "custom",
+      markerEnd: { type: MarkerType.ArrowClosed, color: "#6366f1" },
     } as Edge;
     onEdgesChange(addEdge(newEdge, edges));
   };
 
   return (
     <ReactFlow
-      nodes={nodes}
-      edges={edges}
+      nodes={enrichedNodes}
+      edges={enrichedEdges}
       onNodesChange={handleNodesChange}
       onEdgesChange={handleEdgesChange}
       onConnect={handleConnect}
+      nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
+      defaultEdgeOptions={defaultEdgeOptions}
+      connectionLineStyle={{ stroke: "#6366f1", strokeWidth: 3 }}
+      connectionLineType="smoothstep"
       fitView
       fitViewOptions={{ padding: 0.2 }}
       nodesDraggable={true}
       nodesConnectable={true}
       elementsSelectable={true}
+      minZoom={0.01}
       deleteKeyCode="Backspace"
     >
       <Background color="#27272a" gap={20} />
       <Controls />
-      <MiniMap nodeColor="#6366f1" maskColor="rgba(0,0,0,0.6)" />
     </ReactFlow>
   );
 }

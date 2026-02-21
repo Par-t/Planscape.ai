@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useCopilotAction, useCopilotReadable, useCopilotChat } from "@copilotkit/react-core";
 import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
-import { Node, Edge } from "reactflow";
+import { Node, Edge, MarkerType } from "reactflow";
 import GraphView from "@/components/graph-view";
 import InsightPanel from "@/components/insight-panel";
 import { applyDagreLayout } from "@/lib/graph-layout";
@@ -29,17 +29,17 @@ interface RawEdge {
 const nodeStyle = {
   background: "#1e1e2e",
   color: "#e2e8f0",
-  border: "1px solid #6366f1",
-  borderRadius: "8px",
-  padding: "10px 16px",
-  fontSize: "13px",
-  fontWeight: 500,
-  width: 180,
+  border: "3px solid #6366f1",
+  borderRadius: "15px",
+  padding: "21px 30px",
+  fontSize: "26px",
+  fontWeight: 600,
+  width: 390,
 };
 
-const nodeStyleWarning = { ...nodeStyle, border: "1px solid #f59e0b" };
-const nodeStyleError = { ...nodeStyle, border: "1px solid #ef4444" };
-const nodeStyleOk = { ...nodeStyle, border: "1px solid #10b981" };
+const nodeStyleWarning = { ...nodeStyle, border: "3px solid #f59e0b" };
+const nodeStyleError = { ...nodeStyle, border: "3px solid #ef4444" };
+const nodeStyleOk = { ...nodeStyle, border: "3px solid #10b981" };
 
 export default function Home() {
   const [planText, setPlanText] = useState(TEST_PLAN);
@@ -50,6 +50,17 @@ export default function Home() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
+  const [showAddNode, setShowAddNode] = useState(false);
+  const [newNodeLabel, setNewNodeLabel] = useState("");
+  const [nodeAnnotations, setNodeAnnotations] = useState<
+    Record<string, { status: "ok" | "warning" | "error"; reasons: string[] }>
+  >({});
+  const [activeAnnotation, setActiveAnnotation] = useState<{
+    nodeId: string;
+    label: string;
+    status: "ok" | "warning" | "error";
+    reasons: string[];
+  } | null>(null);
 
   const [sessionId] = useState<string>(() => {
     if (typeof window === "undefined") return uuidv4();
@@ -110,9 +121,9 @@ export default function Home() {
     handler: ({ nodes: rawNodes, edges: rawEdges }: { nodes: RawNode[]; edges: RawEdge[] }) => {
       const flowNodes: Node[] = rawNodes.map((n) => ({
         id: n.id,
-        data: { label: n.label },
+        type: "custom",
+        data: { label: n.label, nodeStyle },
         position: { x: 0, y: 0 },
-        style: nodeStyle,
       }));
 
       const flowEdges: Edge[] = rawEdges.map((e) => ({
@@ -120,8 +131,9 @@ export default function Home() {
         source: e.source,
         target: e.target,
         animated: true,
-        style: { stroke: "#6366f1", strokeWidth: 2 },
-        type: "smoothstep",
+        style: { stroke: "#6366f1", strokeWidth: 3 },
+        type: "custom",
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#6366f1" },
       }));
 
       const laid = applyDagreLayout(flowNodes, flowEdges);
@@ -148,19 +160,31 @@ export default function Home() {
     ],
     handler: ({ nodeId, status, reason }: { nodeId: string; status: "ok" | "warning" | "error"; reason: string }) => {
       console.log(`[flagNode] nodeId=${nodeId}, status=${status}, reason=${reason}`);
+      const s = status === "error" ? nodeStyleError
+        : status === "warning" ? nodeStyleWarning
+        : nodeStyleOk;
       setNodes((prev) =>
         prev.map((n) =>
           n.id === nodeId
-            ? {
-                ...n,
-                style:
-                  status === "error" ? nodeStyleError
-                  : status === "warning" ? nodeStyleWarning
-                  : nodeStyleOk,
-              }
+            ? { ...n, data: { ...n.data, nodeStyle: s } }
             : n
         )
       );
+      // Accumulate annotation
+      setNodeAnnotations((prev) => {
+        const existing = prev[nodeId];
+        const statusPriority = { error: 3, warning: 2, ok: 1 };
+        const newStatus = existing
+          ? (statusPriority[status] > statusPriority[existing.status] ? status : existing.status)
+          : status;
+        return {
+          ...prev,
+          [nodeId]: {
+            status: newStatus,
+            reasons: existing ? [...existing.reasons, reason] : [reason],
+          },
+        };
+      });
       return `Flagged "${nodeId}" as ${status}: ${reason}`;
     },
   });
@@ -208,9 +232,10 @@ export default function Home() {
     setChecking(true);
     setWarnings([]);
     setSuggestions([]);
+    setNodeAnnotations({});
 
     // Reset node styles to default before Claude flags them
-    setNodes((prev) => prev.map((n) => ({ ...n, style: nodeStyle })));
+    setNodes((prev) => prev.map((n) => ({ ...n, data: { ...n.data, nodeStyle } })));
 
     checkCountRef.current += 1;
     const checkNum = checkCountRef.current;
@@ -256,12 +281,142 @@ INSTRUCTIONS:
     }
   };
 
+  const handleAddNode = () => {
+    if (!newNodeLabel.trim()) return;
+    const id = `node-${Date.now()}`;
+    const lastNode = nodes[nodes.length - 1];
+    const position = lastNode
+      ? { x: lastNode.position.x + 220, y: lastNode.position.y }
+      : { x: 100, y: 100 };
+
+    setNodes((prev) => [
+      ...prev,
+      {
+        id,
+        type: "custom",
+        data: { label: newNodeLabel.trim(), nodeStyle },
+        position,
+      },
+    ]);
+    setNewNodeLabel("");
+    setShowAddNode(false);
+  };
+
+  const handleDeleteNode = useCallback((nodeId: string) => {
+    setNodes((prev) => prev.filter((n) => n.id !== nodeId));
+    setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
+  }, []);
+
+  const handleDeleteEdge = useCallback((edgeId: string) => {
+    setEdges((prev) => prev.filter((e) => e.id !== edgeId));
+  }, []);
+
+  const handleAnnotationClick = useCallback((info: { nodeId: string; label: string; status: "ok" | "warning" | "error"; reasons: string[] }) => {
+    setActiveAnnotation(info);
+  }, []);
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
       <div className="border-b border-zinc-800 px-6 py-4">
         <h1 className="text-lg font-semibold tracking-tight">Plan → Graph</h1>
         <p className="text-zinc-400 text-sm">Paste a plan, Claude extracts the dependency graph. Edit it, then check your changes.</p>
       </div>
+
+      {/* Toolbar */}
+      <div className="border-b border-zinc-800 px-6 py-2 flex items-center gap-3 bg-zinc-950">
+        <button
+          onClick={() => setShowAddNode(true)}
+          disabled={nodes.length === 0}
+          className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+        >
+          + Add Node
+        </button>
+      </div>
+
+      {/* Add Node Modal */}
+      {showAddNode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-80 flex flex-col gap-4">
+            <h2 className="text-sm font-semibold text-zinc-100">Add New Node</h2>
+            <input
+              type="text"
+              autoFocus
+              value={newNodeLabel}
+              onChange={(e) => setNewNodeLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddNode();
+                if (e.key === "Escape") { setShowAddNode(false); setNewNodeLabel(""); }
+              }}
+              placeholder="Enter step name..."
+              className="bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { setShowAddNode(false); setNewNodeLabel(""); }}
+                className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddNode}
+                disabled={!newNodeLabel.trim()}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Annotation Detail Dialog */}
+      {activeAnnotation && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setActiveAnnotation(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setActiveAnnotation(null); }}
+        >
+          <div
+            className="bg-zinc-900 border border-zinc-700 rounded-xl p-12 w-[720px] max-h-[75vh] flex flex-col gap-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <span
+                className="w-6 h-6 rounded-full flex-shrink-0"
+                style={{
+                  background: activeAnnotation.status === "error" ? "#ef4444"
+                    : activeAnnotation.status === "warning" ? "#f59e0b"
+                    : "#10b981",
+                }}
+              />
+              <h2 className="text-2xl font-semibold text-zinc-100 truncate">
+                {activeAnnotation.label}
+              </h2>
+              <span className="text-base text-zinc-400 ml-auto font-medium">
+                {activeAnnotation.status.toUpperCase()}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-3 overflow-y-auto">
+              {activeAnnotation.reasons.map((r, i) => (
+                <div
+                  key={i}
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg p-6 text-base text-zinc-200 leading-relaxed"
+                >
+                  {r}
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setActiveAnnotation(null)}
+              className="self-end px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         <div className="w-80 border-r border-zinc-800 flex flex-col p-4 gap-4">
@@ -286,12 +441,14 @@ INSTRUCTIONS:
             edges={edges}
             onNodesChange={setNodes}
             onEdgesChange={setEdges}
+            onDeleteNode={handleDeleteNode}
+            onDeleteEdge={handleDeleteEdge}
+            nodeAnnotations={nodeAnnotations}
+            onAnnotationClick={handleAnnotationClick}
           />
         </div>
 
         <InsightPanel
-          warnings={warnings}
-          suggestions={suggestions}
           checking={checking}
           hasChanges={hasChanges}
           onCheck={handleCheckChanges}

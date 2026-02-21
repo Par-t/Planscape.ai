@@ -4,10 +4,10 @@ import { Node, Edge } from "reactflow";
 export function applyDagreLayout(nodes: Node[], edges: Edge[]): Node[] {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "LR", nodesep: 60, ranksep: 100 });
+  g.setGraph({ rankdir: "TB", nodesep: 120, ranksep: 180 });
 
   nodes.forEach((node) => {
-    g.setNode(node.id, { width: 180, height: 50 });
+    g.setNode(node.id, { width: 390, height: 90 });
   });
 
   edges.forEach((edge) => {
@@ -20,7 +20,7 @@ export function applyDagreLayout(nodes: Node[], edges: Edge[]): Node[] {
     const { x, y } = g.node(node.id);
     return {
       ...node,
-      position: { x: x - 90, y: y - 25 },
+      position: { x: x - 195, y: y - 45 },
     };
   });
 }
