@@ -19,27 +19,14 @@ Upload a document or paste a plan. Claude reads it and externalizes it as an int
 
 ---
 
-## Architecture (Target)
+## Architecture
 
 ```
-PHASE 1: Generate
-User pastes plan → CopilotKit sends to Claude → Claude calls createGraph(nodes, edges)
-→ dagre lays it out → React Flow renders interactive graph
-
-PHASE 2: Edit
-User drags/deletes/connects nodes freely (no API calls during editing)
-→ "Check My Changes" button appears when graph differs from confirmed state
-
-PHASE 3: React (agentic, via CopilotKit + MCP)
-Button click → diff computed (old vs new graph)
-→ appendMessage through CopilotKit with: sessionId + originalPlan + changes[] + current graph
-→ Claude: search_long_term_memory → reason → flagNode() + addInsight() → create_long_term_memory
-→ Nodes turn red/yellow/green, insight panel shows Claude's commentary
-
-PHASE 4: Memory (Redis Agent Memory Server)
-Claude stores per-session analysis in Redis via MCP tools
-On each subsequent check, Claude searches past analysis first
-→ Notices patterns, escalates recurring issues, personalises responses
+PHASE 1: Generate          ✅ DONE
+PHASE 2: Edit              ✅ DONE
+PHASE 3: Check Changes     ✅ DONE (direct API — will be replaced in Phase 4)
+PHASE 4: Agentic Memory    🔧 IN PROGRESS
+PHASE 5: Polish            ⬜ TODO
 ```
 
 ---
@@ -75,7 +62,7 @@ spike/
     page.tsx                    ✅ Full state + all handlers
     layout.tsx                  ✅ CopilotKit provider
     api/
-      copilotkit/route.ts       ✅ CopilotRuntime + AnthropicAdapter (claude-sonnet-4-5)
+      copilotkit/route.ts       ✅ CopilotRuntime + AnthropicAdapter + MCP config (partial)
       check-changes/route.ts    ✅ Direct Claude call — WILL BE DELETED in Phase 4
   components/
     graph-view.tsx              ✅ React Flow, editable, connected
@@ -83,99 +70,138 @@ spike/
   lib/
     graph-layout.ts             ✅ dagre layout
     diff.ts                     ✅ GraphSnapshot + diffGraphs
-  .env.local                    ✅ ANTHROPIC_API_KEY set
+  docker-compose.yml            ✅ Redis + Agent Memory Server
+  .env.local                    ✅ ANTHROPIC_API_KEY set, OPENAI_API_KEY placeholder added
 ```
 
 ---
 
-## What's Being Planned (Phase 4 — Agentic Memory via MCP)
+## Phase 4 — Agentic Memory via MCP 🔧
 
 ### Goal
-Replace the dumb single-shot `/api/check-changes` call with a full agentic loop:
-Claude gets memory tools, searches past analysis before reasoning, stores insights after, and escalates patterns it notices over time.
+Replace the single-shot `/api/check-changes` call with a full agentic loop:
+Claude gets memory tools via MCP, searches past analysis before reasoning, stores insights after, and escalates patterns over time.
 
-### Infrastructure
+### Infrastructure (DONE)
 `spike/docker-compose.yml` — Redis + Agent Memory Server
-```yaml
-services:
-  redis:
-    image: redis/redis-stack:latest
-    ports: ["6379:6379", "8001:8001"]
-
-  memory-server:
-    image: redislabs/agent-memory-server:latest
-    ports: ["9000:9000"]
-    environment:
-      REDIS_URL: redis://redis:6379
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      GENERATION_MODEL: claude-sonnet-4-5
-      EMBEDDING_MODEL: text-embedding-3-small
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      DISABLE_AUTH: "true"
-    command: ["agent-memory", "mcp", "--mode", "sse", "--port", "9000"]
-    depends_on: [redis]
 ```
-Start: `docker compose up`
-MCP endpoint: `http://localhost:9000/mcp`
-
-### Changes Required
-
-**1. `spike/.env.local`** — Add:
-```
-OPENAI_API_KEY=sk-...       # for text-embedding-3-small
-REDIS_URL=redis://localhost:6379
+docker compose up → redis on :6379, memory MCP on :9000
 ```
 
-**2. `spike/app/api/copilotkit/route.ts`** — Connect MCP:
-```typescript
-const runtime = new CopilotRuntime({
-  mcpServers: [{ endpoint: "http://localhost:9000/mcp" }]
-});
-```
-Claude now gets: `create_long_term_memory`, `search_long_term_memory`, `memory_prompt` on every call.
+### What's done so far
+- `docker-compose.yml` created ✅
+- `.env.local` updated with `OPENAI_API_KEY` + `REDIS_URL` placeholders ✅
+- `route.ts` MCP config started (needs `ai` package import fix) ✅
 
-**3. `spike/app/page.tsx`** — Four additions:
-- `sessionId` state (UUID persisted in localStorage)
-- `describeGraph(g: GraphSnapshot): string` helper
-- `useCopilotAction("flagNode")` — Claude calls this to recolor nodes
-- `useCopilotAction("addInsight")` — Claude calls this to populate insight panel
-- Replace `handleCheckChanges` fetch with `appendMessage` through CopilotKit
+### Remaining work
+1. Fix `experimental_createMCPClient` import (or use correct export name from `ai` package)
+2. Add `useCopilotAction("flagNode")` — Claude calls this to recolor nodes
+3. Add `useCopilotAction("addInsight")` — Claude calls this to populate insight panel
+4. Add `sessionId` state (UUID persisted in localStorage)
+5. Add `describeGraph(g: GraphSnapshot): string` helper
+6. Replace `handleCheckChanges` fetch → `appendMessage` through CopilotKit
+7. Delete `/api/check-changes/route.ts`
 
-**4. Delete `spike/app/api/check-changes/route.ts`** — no longer needed
-
-### What Claude's Agentic Loop Looks Like
+### Claude's agentic loop (target behavior)
 ```
 1. User clicks "Check My Changes"
 2. appendMessage → Claude receives: sessionId + plan + changes + current graph
-3. Claude calls search_long_term_memory("session <id> analysis history")
+3. Claude calls search_long_term_memory("session <id> analysis")
    → "Check 1: user deleted validation node, flagged as error"
 4. Claude reasons: second offense — escalate
-5. Claude calls flagNode("validation-1", "error", "Validation removed again — recurring pattern")
-6. Claude calls addInsight("warning", "You've bypassed validation twice. High deployment risk.")
-7. Claude calls create_long_term_memory("Session <id> Check 2: user deleted validation again, escalated")
+5. Claude calls flagNode("validation-1", "error", "Validation removed again")
+6. Claude calls addInsight("warning", "You've bypassed validation twice")
+7. Claude calls create_long_term_memory("Session <id> Check 2: escalated")
 ```
 
-Without memory: same generic warning every check.
-With memory: Claude notices patterns, escalates, personalises.
+---
+
+## Phase 5 — Polish ⬜
+
+### 5A. Visual Design
+
+**Node styling**
+- Custom React Flow nodes with rounded cards, subtle shadows, and icon badges
+- Status glow effects: soft green pulse for ok, amber shimmer for warning, red throb for error
+- Smooth CSS transitions when status changes (not instant recolor)
+- Node labels with truncation + tooltip on hover for long labels
+
+**Dynamic gradient background**
+- Animated mesh gradient on the page background (dark theme: deep indigo → violet → slate)
+- Subtle movement — slow, drifting gradient that feels alive but isn't distracting
+- Could use CSS `@property` animated gradients or a small canvas shader
+
+**Edge styling**
+- Gradient edges (source color → target color) instead of flat indigo
+- Thicker edges for critical-path dependencies
+- Dashed edges for "suggested" connections Claude recommends
+
+**Color palette upgrade**
+- Move from flat Tailwind colors to a richer, more cohesive palette
+- Status colors with proper opacity layers: `bg-red-500/10 border-red-500/40` instead of hard borders
+- Glassmorphism on panels: `backdrop-blur-xl bg-zinc-900/60`
+
+### 5B. Interaction Polish
+
+**Graph animations**
+- Nodes animate into position on first generation (staggered fade + slide from center)
+- When Claude flags a node, it briefly shakes or pulses before settling into its new color
+- Edge draw animation: edges appear as if being drawn, not popping in
+
+**Transitions**
+- Smooth panel transitions (insight panel slides in, warnings fade in with stagger)
+- Loading state: skeleton shimmer → content with crossfade
+- Button state transitions: idle → loading spinner → success checkmark
+
+**Better empty states**
+- Illustrated empty state for the graph area (faint wireframe graph placeholder)
+- Welcome message with suggested demo plans to try
+
+### 5C. Layout & UX
+
+**Responsive layout**
+- Collapsible left panel (plan input)
+- Collapsible right panel (insights)
+- Full-width graph view when panels are collapsed
+- Keyboard shortcut to toggle panels
+
+**Header bar**
+- Project title + session indicator
+- "New Session" button to reset
+- Connection status indicator (Redis/MCP connected or not)
+
+**Insight panel upgrade**
+- Timestamp on each warning/suggestion
+- Severity icons (⚠️ 🔴 ✅) next to each item
+- Collapsible history: see past checks, not just the latest
+- "Accept" button on suggestions to auto-apply them
+
+### 5D. Micro-interactions
+
+- Cursor changes on draggable nodes
+- Hover effects on nodes: slight lift + shadow increase
+- Click feedback on buttons: brief scale down + up
+- Toast notifications for actions ("Graph generated", "Changes checked")
 
 ---
 
 ## Demo Script
 
 ### Demo 1: ML Pipeline
-1. Paste ML pipeline plan → graph generates with parallel paths
+1. Paste ML pipeline plan → graph generates with animated node entrance
 2. Drag "Training" before "Data Cleaning"
-3. Click "Check" → Claude flags dependency violation, nodes turn red
-4. Undo or reconnect → Click "Check" again → Claude references first check
+3. Click "Check" → Claude flags dependency violation, node pulses red
+4. Click "Check" again → Claude references first check, escalates
 
 ### Demo 2: Delete a critical node
 1. Delete "Beta Testing" node
 2. Check → Claude: "Skipping beta means untested product ships"
-3. Delete it again next session → Claude escalates: "Recurring pattern detected"
+3. Delete it again → Claude notices pattern from memory, escalates severity
 
 ### Demo 3: Live audience
 1. Audience gives a scenario
-2. Paste, generate, make a bad edit, check — Claude catches it live
+2. Paste, generate (animated), make a bad edit, check — Claude catches it live
+3. Show the memory: "Claude remembered your last mistake"
 
 ---
 
@@ -183,8 +209,10 @@ With memory: Claude notices patterns, escalates, personalises.
 
 | Risk | Status |
 |---|---|
+| `experimental_createMCPClient` export not found in `ai` v6 | Need to check correct import path |
 | Redis Agent Memory Server Docker image name | Verify: `redislabs/agent-memory-server:latest` |
 | MCP SSE mode stability in CopilotKit | Untested — may need polling fallback |
-| OpenAI key required for embeddings | User has it, needs to be added to .env.local |
+| OpenAI key required for embeddings | User has it, needs actual key in .env.local |
 | `appendMessage` deprecated | Works fine, won't break the spike |
 | Claude calls flagNode/addInsight instead of responding in text | Handled by action descriptions — watch first test |
+| Polish scope creep | Phase 5 is a buffet — pick 3-4 items max, not all |
