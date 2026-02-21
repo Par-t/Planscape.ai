@@ -1,0 +1,21 @@
+services:
+  redis:
+    image: redis/redis-stack:latest
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+
+  memory-server:
+    image: redislabs/agent-memory-server:latest
+    ports:
+      - "9000:9000"
+    environment:
+      REDIS_URL: redis://redis:6379
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GENERATION_MODEL: claude-sonnet-4-5
+      EMBEDDING_MODEL: text-embedding-3-small
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DISABLE_AUTH: "true"
+    command: ["agent-memory", "mcp", "--mode", "sse", "--port", "9000"]
+    depends_on:
+      - redis

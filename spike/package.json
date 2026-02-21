@@ -14,6 +14,7 @@
     "@copilotkit/react-ui": "^1.51.4",
     "@copilotkit/runtime": "^1.51.4",
     "@dagrejs/dagre": "^2.0.4",
+    "ai": "^6.0.97",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
