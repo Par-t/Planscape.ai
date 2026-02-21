@@ -7,7 +7,8 @@ import { Node, Edge } from "reactflow";
 import GraphView from "@/components/graph-view";
 import InsightPanel from "@/components/insight-panel";
 import { applyDagreLayout } from "@/lib/graph-layout";
-import { snapshotFromFlow, diffGraphs, GraphSnapshot } from "@/lib/diff";
+import { snapshotFromFlow, diffGraphs, describeGraph, GraphSnapshot } from "@/lib/diff";
+import { v4 as uuidv4 } from "uuid";
 
 const TEST_PLAN = `We need to collect training data, then clean and preprocess it.
 While that's happening, we can set up the ML infrastructure.
@@ -50,7 +51,17 @@ export default function Home() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
 
+  const [sessionId] = useState<string>(() => {
+    if (typeof window === "undefined") return uuidv4();
+    const stored = localStorage.getItem("minui-session-id");
+    if (stored) return stored;
+    const id = uuidv4();
+    localStorage.setItem("minui-session-id", id);
+    return id;
+  });
+
   const confirmedGraph = useRef<GraphSnapshot | null>(null);
+  const checkCountRef = useRef(0);
   const planTextRef = useRef(planText);
   planTextRef.current = planText;
 
@@ -66,6 +77,11 @@ export default function Home() {
   useCopilotReadable({
     description: "Current graph nodes and edges",
     value: { nodes: nodes.map((n) => ({ id: n.id, label: n.data.label })), edges },
+  });
+
+  useCopilotReadable({
+    description: "Unique session ID for memory persistence",
+    value: sessionId,
   });
 
   useCopilotAction({
@@ -119,6 +135,56 @@ export default function Home() {
     },
   });
 
+  useCopilotAction({
+    name: "flagNode",
+    description:
+      "Flag a node with a status color. Call once per node that needs a status update. " +
+      "'ok' = green (node is fine), 'warning' = amber (potential issue), " +
+      "'error' = red (definite problem). Include a brief reason.",
+    parameters: [
+      { name: "nodeId", type: "string", description: "The ID of the node to flag", required: true },
+      { name: "status", type: "string", description: "ok | warning | error", required: true },
+      { name: "reason", type: "string", description: "Brief explanation of why this status was assigned", required: true },
+    ],
+    handler: ({ nodeId, status, reason }: { nodeId: string; status: "ok" | "warning" | "error"; reason: string }) => {
+      console.log(`[flagNode] nodeId=${nodeId}, status=${status}, reason=${reason}`);
+      setNodes((prev) =>
+        prev.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                style:
+                  status === "error" ? nodeStyleError
+                  : status === "warning" ? nodeStyleWarning
+                  : nodeStyleOk,
+              }
+            : n
+        )
+      );
+      return `Flagged "${nodeId}" as ${status}: ${reason}`;
+    },
+  });
+
+  useCopilotAction({
+    name: "addInsight",
+    description:
+      "Add a warning or suggestion to the insight panel. " +
+      "Use 'warning' for problems found, 'suggestion' for helpful observations.",
+    parameters: [
+      { name: "type", type: "string", description: "warning | suggestion", required: true },
+      { name: "message", type: "string", description: "The insight message to display", required: true },
+    ],
+    handler: ({ type, message }: { type: "warning" | "suggestion"; message: string }) => {
+      console.log(`[addInsight] type=${type}, message=${message}`);
+      if (type === "warning") {
+        setWarnings((prev) => [...prev, message]);
+      } else {
+        setSuggestions((prev) => [...prev, message]);
+      }
+      return `Added ${type}: "${message}"`;
+    },
+  });
+
   const handleGenerate = async () => {
     if (!planText.trim()) return;
     setLoading(true);
@@ -143,42 +209,48 @@ export default function Home() {
     setWarnings([]);
     setSuggestions([]);
 
+    // Reset node styles to default before Claude flags them
+    setNodes((prev) => prev.map((n) => ({ ...n, style: nodeStyle })));
+
+    checkCountRef.current += 1;
+    const checkNum = checkCountRef.current;
+
     try {
-      const res = await fetch("/api/check-changes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          originalPlan: planTextRef.current,
-          previousGraph: confirmedGraph.current,
-          currentGraph: current,
-          changes,
-        }),
-      });
+      await appendMessage(
+        new TextMessage({
+          role: MessageRole.User,
+          content: `You are a plan dependency analyzer. I have a plan and a dependency graph. I just made edits to the graph. Analyze my changes.
 
-      const data = await res.json();
-      setWarnings(data.warnings ?? []);
-      setSuggestions(data.suggestions ?? []);
+SESSION ID: ${sessionId}
+CHECK NUMBER: ${checkNum}
 
-      if (data.nodeStatuses) {
-        setNodes((prev) =>
-          prev.map((n) => {
-            const status = data.nodeStatuses[n.id];
-            return {
-              ...n,
-              style:
-                status === "error" ? nodeStyleError
-                : status === "warning" ? nodeStyleWarning
-                : status === "ok" ? nodeStyleOk
-                : n.style,
-            };
-          })
-        );
-      }
+ORIGINAL PLAN:
+${planTextRef.current}
+
+PREVIOUS GRAPH:
+${describeGraph(confirmedGraph.current)}
+
+CURRENT GRAPH (after my edits):
+${describeGraph(current)}
+
+CHANGES MADE:
+${changes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+
+INSTRUCTIONS:
+1. If memory tools are available, call search_long_term_memory with query "session ${sessionId} analysis" to check for past context.
+2. Analyze whether my changes break dependencies or create logical problems.
+3. For each affected node, call flagNode with the appropriate status ("ok", "warning", or "error") and a reason.
+4. Call addInsight for each warning or suggestion (max 2 warnings, max 2 suggestions).
+5. If memory tools are available, call create_long_term_memory to store a brief summary: "Session ${sessionId} Check ${checkNum}: [your summary]"
+6. If past analysis exists, note repeated patterns and escalate severity.
+7. Do NOT respond with plain text. Only use the tool calls above.`,
+        })
+      );
 
       confirmedGraph.current = current;
       setHasChanges(false);
     } catch {
-      setWarnings(["Failed to reach Claude. Check your API key."]);
+      setWarnings(["Failed to reach Claude. Is the server running?"]);
     } finally {
       setChecking(false);
     }

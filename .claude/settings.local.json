@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(ls:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:docs.copilotkit.ai)",
+      "WebFetch(domain:github.com)",
+      "Bash(node:*)"
     ]
   }
 }

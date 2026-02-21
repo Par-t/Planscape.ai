@@ -58,3 +58,21 @@ export function diffGraphs(prev: GraphSnapshot, curr: GraphSnapshot): string[] {
 
   return changes;
 }
+
+export function describeGraph(g: GraphSnapshot): string {
+  if (g.nodes.length === 0) return "(empty graph)";
+
+  const nodeList = g.nodes.map((n) => `"${n.label}" (${n.id})`).join(", ");
+  const edgeList =
+    g.edges.length === 0
+      ? "none"
+      : g.edges
+          .map((e) => {
+            const src = g.nodes.find((n) => n.id === e.source)?.label ?? e.source;
+            const tgt = g.nodes.find((n) => n.id === e.target)?.label ?? e.target;
+            return `"${src}" → "${tgt}"`;
+          })
+          .join(", ");
+
+  return `Nodes: ${nodeList}\nEdges: ${edgeList}`;
+}
