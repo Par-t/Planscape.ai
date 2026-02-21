@@ -1,4 +1,4 @@
-# MinUI
+# Planscape.ai
 
 > **Your project plan is stuck in bullet points and spreadsheet cells. That's embarrassing.**
 >

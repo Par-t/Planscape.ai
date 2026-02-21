@@ -59,8 +59,20 @@ export default function GraphView({
 }: GraphViewProps) {
   if (nodes.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-zinc-500 text-sm">
-        Graph will appear here
+      <div className="flex flex-col items-center justify-center h-full text-zinc-500 gap-4">
+        <div className="empty-float">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-700">
+            <circle cx="5" cy="6" r="2" />
+            <circle cx="19" cy="6" r="2" />
+            <circle cx="12" cy="18" r="2" />
+            <path d="M5 8v2a4 4 0 0 0 4 4h2" />
+            <path d="M19 8v2a4 4 0 0 1-4 4h-2" />
+          </svg>
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-medium text-zinc-600">No graph yet</p>
+          <p className="text-xs text-zinc-700 mt-1">Paste a plan on the left and hit Generate</p>
+        </div>
       </div>
     );
   }
@@ -134,7 +146,7 @@ export default function GraphView({
       deleteKeyCode="Backspace"
       proOptions={{ hideAttribution: true }}
     >
-      <Background color="#27272a" gap={20} />
+      <Background color="#27272a" gap={24} size={1.5} />
       <Controls showInteractive={false} />
     </ReactFlow>
   );

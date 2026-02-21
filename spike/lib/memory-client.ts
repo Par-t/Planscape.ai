@@ -5,7 +5,7 @@ const MCP_URL = "http://localhost:9000/sse";
 
 async function withMCPClient<T>(fn: (client: Client) => Promise<T>): Promise<T> {
   const transport = new SSEClientTransport(new URL(MCP_URL));
-  const client = new Client({ name: "minui", version: "1.0" });
+  const client = new Client({ name: "planscape", version: "1.0" });
   await client.connect(transport);
   try {
     return await fn(client);

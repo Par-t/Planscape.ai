@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Planscaped.ai
+
+> Your plans are a mess. Let's untangle them.
+
+Paste a chaotic plan. Watch AI turn it into a crisp, editable dependency flowchart. Drag nodes around. Delete things recklessly. Then ask Claude to tell you what you broke.
+
+Built with [Next.js](https://nextjs.org), [CopilotKit](https://copilotkit.ai), [React Flow](https://reactflow.dev), and an unreasonable amount of caffeine.
+
+---
+
+## What it does
+
+1. **You paste a plan** -- bullet points, stream of consciousness, meeting notes, whatever
+2. **Claude reads it** and extracts a dependency graph (who blocks whom, what goes first)
+3. **You get an interactive flowchart** -- drag, connect, delete, add steps
+4. **You break things** (you will)
+5. **Claude reviews your changes** and tells you exactly what you messed up, with color-coded severity
+
+It also has long-term memory (Redis), so Claude remembers your past mistakes. Because someone should.
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- An [Anthropic API key](https://console.anthropic.com)
+- Redis (optional, for memory features -- see `docker-compose.yml`)
+
+### Setup
 
 ```bash
+# Install dependencies
+npm install
+
+# Copy env and add your API key
+cp .env.local.example .env.local
+
+# Start Redis (optional)
+docker compose up -d
+
+# Run the dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) and start untangling.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Tech Stack
 
-## Learn More
+| Layer | Tech |
+|-------|------|
+| Framework | Next.js 16 (App Router) |
+| AI Orchestration | CopilotKit |
+| LLM | Claude (Anthropic) |
+| Graph Rendering | React Flow |
+| Graph Layout | Dagre |
+| Styling | Tailwind CSS v4 |
+| Memory | Redis (via Docker) |
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+spike/
+├── app/
+│   ├── api/
+│   │   ├── copilotkit/   # CopilotKit runtime endpoint
+│   │   ├── elaborate/    # Plan rephrasing endpoint
+│   │   └── memory/       # Redis memory store/search
+│   ├── layout.tsx        # Root layout + CopilotKit provider
+│   ├── page.tsx          # Main app page (all the action)
+│   └── globals.css       # Global styles + custom effects
+├── components/
+│   ├── graph-view.tsx    # React Flow wrapper
+│   ├── custom-node.tsx   # Custom node with delete + annotations
+│   ├── custom-edge.tsx   # Custom edge with delete button
+│   └── insight-panel.tsx # Right sidebar with check results
+└── lib/
+    ├── diff.ts           # Graph snapshot diffing
+    ├── graph-layout.ts   # Dagre layout helper
+    └── memory-client.ts  # Redis MCP client
+```
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## License
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Do whatever you want with this. If your plans are still a mess afterward, that's on you.

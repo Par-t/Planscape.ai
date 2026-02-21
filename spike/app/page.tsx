@@ -27,19 +27,20 @@ interface RawEdge {
 }
 
 const nodeStyle = {
-  background: "#1e1e2e",
+  background: "linear-gradient(135deg, #1e1e2e 0%, #1a1a2e 100%)",
   color: "#e2e8f0",
-  border: "3px solid #6366f1",
-  borderRadius: "15px",
-  padding: "21px 30px",
-  fontSize: "26px",
+  border: "2px solid #6366f1",
+  borderRadius: "16px",
+  padding: "30px 45px",
+  fontSize: "39px",
   fontWeight: 600,
-  width: 390,
+  width: 585,
+  boxShadow: "0 4px 24px rgba(99, 102, 241, 0.08)",
 };
 
-const nodeStyleWarning = { ...nodeStyle, border: "3px solid #f59e0b" };
-const nodeStyleError = { ...nodeStyle, border: "3px solid #ef4444" };
-const nodeStyleOk = { ...nodeStyle, border: "3px solid #10b981" };
+const nodeStyleWarning = { ...nodeStyle, border: "2px solid #f59e0b", boxShadow: "0 4px 24px rgba(245, 158, 11, 0.1)" };
+const nodeStyleError = { ...nodeStyle, border: "2px solid #ef4444", boxShadow: "0 4px 24px rgba(239, 68, 68, 0.1)" };
+const nodeStyleOk = { ...nodeStyle, border: "2px solid #10b981", boxShadow: "0 4px 24px rgba(16, 185, 129, 0.1)" };
 
 export default function Home() {
   const [planText, setPlanText] = useState(TEST_PLAN);
@@ -82,10 +83,10 @@ export default function Home() {
 
   const [sessionId] = useState<string>(() => {
     if (typeof window === "undefined") return uuidv4();
-    const stored = localStorage.getItem("minui-session-id");
+    const stored = localStorage.getItem("planscape-session-id");
     if (stored) return stored;
     const id = uuidv4();
-    localStorage.setItem("minui-session-id", id);
+    localStorage.setItem("planscape-session-id", id);
     return id;
   });
 
@@ -192,27 +193,28 @@ export default function Home() {
     handler: ({ nodeId, status: rawStatus, reason }: { nodeId: string; status: string; reason: string }) => {
       const status = rawStatus as "ok" | "warning" | "error";
       console.log(`[flagNode] nodeId=${nodeId}, status=${status}, reason=${reason}`);
-      const s = status === "error" ? nodeStyleError
-        : status === "warning" ? nodeStyleWarning
-        : nodeStyleOk;
-      setNodes((prev) =>
-        prev.map((n) =>
-          n.id === nodeId
-            ? { ...n, data: { ...n.data, nodeStyle: s } }
-            : n
-        )
-      );
-      // Accumulate annotation
+      const statusPriority: Record<string, number> = { error: 3, warning: 2, ok: 1 };
+      const styleForStatus = (s: "ok" | "warning" | "error") =>
+        s === "error" ? nodeStyleError : s === "warning" ? nodeStyleWarning : nodeStyleOk;
+
+      // Accumulate annotation first to determine the highest-priority status
       setNodeAnnotations((prev) => {
         const existing = prev[nodeId];
-        const statusPriority: Record<string, number> = { error: 3, warning: 2, ok: 1 };
-        const newStatus = existing
+        const resolvedStatus = existing
           ? (statusPriority[status] > statusPriority[existing.status] ? status : existing.status)
           : status;
+        // Apply node style matching the resolved (highest-priority) status
+        setNodes((prevNodes) =>
+          prevNodes.map((n) =>
+            n.id === nodeId
+              ? { ...n, data: { ...n.data, nodeStyle: styleForStatus(resolvedStatus) } }
+              : n
+          )
+        );
         return {
           ...prev,
           [nodeId]: {
-            status: newStatus,
+            status: resolvedStatus,
             reasons: existing ? [...existing.reasons, reason] : [reason],
           },
         };
@@ -440,16 +442,27 @@ INSTRUCTIONS:
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
-      <div className="border-b border-zinc-800 px-6 py-4">
-        <h1 className="text-lg font-semibold tracking-tight">Plan → Graph</h1>
-        <p className="text-zinc-400 text-sm">Paste a plan, Claude extracts the dependency graph. Edit it, then check your changes.</p>
+      <div className="border-b border-zinc-800/50 px-6 py-5 header-glow">
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-indigo-500/20">
+            P
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-gradient">
+              Planscape.ai
+            </h1>
+            <p className="text-zinc-500 text-xs mt-0.5">
+              Your plans are a mess. Let&apos;s untangle them.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Add Node Modal */}
       {showAddNode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-80 flex flex-col gap-4">
-            <h2 className="text-sm font-semibold text-zinc-100">Add New Node</h2>
+          <div className="bg-zinc-900 border border-zinc-700/50 rounded-2xl p-6 w-80 flex flex-col gap-4 shadow-2xl shadow-black/50">
+            <h2 className="text-sm font-semibold text-zinc-100">Add a new step</h2>
             <input
               type="text"
               autoFocus
@@ -460,7 +473,7 @@ INSTRUCTIONS:
                 if (e.key === "Escape") { setShowAddNode(false); setNewNodeLabel(""); }
               }}
               placeholder="Enter step name..."
-              className="bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500"
+              className="bg-zinc-800 border border-zinc-600/50 rounded-xl px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none textarea-glow"
             />
             <div className="flex gap-2 justify-end">
               <button
@@ -472,7 +485,7 @@ INSTRUCTIONS:
               <button
                 onClick={handleAddNode}
                 disabled={!newNodeLabel.trim()}
-                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl px-4 py-1.5 text-xs font-semibold transition-all btn-glow"
               >
                 Add
               </button>
@@ -489,7 +502,7 @@ INSTRUCTIONS:
           onKeyDown={(e) => { if (e.key === "Escape") setActiveAnnotation(null); }}
         >
           <div
-            className="bg-zinc-900 border border-zinc-700 rounded-xl p-12 w-[720px] max-h-[75vh] flex flex-col gap-6"
+            className="bg-zinc-900 border border-zinc-700/50 rounded-2xl p-12 w-[720px] max-h-[75vh] flex flex-col gap-6 shadow-2xl shadow-black/50"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3">
@@ -531,26 +544,40 @@ INSTRUCTIONS:
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-80 border-r border-zinc-800 flex flex-col p-4 gap-4">
+        <div className="w-80 border-r border-zinc-800/50 flex flex-col p-4 gap-3">
           <textarea
-            className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg p-3 text-sm text-zinc-100 placeholder:text-zinc-600 resize-none focus:outline-none focus:border-indigo-500 font-mono"
-            placeholder="Paste your plan here..."
+            className="flex-1 bg-zinc-900/80 border border-zinc-700/50 rounded-xl p-3 text-sm text-zinc-100 placeholder:text-zinc-600 resize-none focus:outline-none textarea-glow font-mono leading-relaxed"
+            placeholder={"Paste your grand plan here...\n(We promise not to judge. Much.)"}
             value={planText}
             onChange={(e) => setPlanText(e.target.value)}
           />
           <button
             onClick={handleExpand}
             disabled={expanding || loading || !planText.trim()}
-            className="bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg py-2 text-sm font-medium transition-colors"
+            className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-300 hover:text-white rounded-xl py-2 text-sm font-medium transition-all border border-zinc-700/50"
           >
-            {expanding ? "Rephrasing..." : "Rephrase it"}
+            {expanding ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="w-3.5 h-3.5 spin-slow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                Rephrasing...
+              </span>
+            ) : (
+              "Rephrase it"
+            )}
           </button>
           <button
             onClick={handleGenerate}
             disabled={loading}
-            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg py-2.5 text-sm font-medium transition-colors"
+            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl py-2.5 text-sm font-semibold transition-all btn-glow"
           >
-            {loading ? "Analyzing..." : "Generate Graph →"}
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="w-4 h-4 spin-slow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                Claude is thinking...
+              </span>
+            ) : (
+              "Generate Graph"
+            )}
           </button>
         </div>
 
@@ -559,7 +586,7 @@ INSTRUCTIONS:
             {historyLen > 0 && (
               <button
                 onClick={handleUndo}
-                className="bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg px-3 py-2 text-sm font-medium transition-colors shadow-lg flex items-center gap-1.5"
+                className="bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-xl px-3 py-2 text-sm font-medium transition-all shadow-lg backdrop-blur-sm border border-zinc-700/50 flex items-center gap-1.5"
                 title="Undo (Ctrl+Z)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -572,9 +599,9 @@ INSTRUCTIONS:
             <button
               onClick={() => setShowAddNode(true)}
               disabled={nodes.length === 0}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors shadow-lg"
+              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl px-4 py-2 text-sm font-semibold transition-all shadow-lg btn-glow"
             >
-              + Add Node
+              + Add Step
             </button>
           </div>
           <GraphView

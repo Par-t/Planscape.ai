@@ -52,3 +52,86 @@ body {
 .source-handle:hover {
   box-shadow: 0 0 6px rgba(99, 102, 241, 0.8);
 }
+
+/* ─── Unplangled: Brand gradients & effects ─── */
+
+@keyframes gradient-x {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.text-gradient {
+  background: linear-gradient(90deg, #818cf8, #a78bfa, #c084fc, #a78bfa, #818cf8);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradient-x 6s ease infinite;
+}
+
+.header-glow {
+  position: relative;
+}
+.header-glow::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  height: 120px;
+  background: radial-gradient(ellipse, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.btn-glow {
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.25), 0 0 60px rgba(99, 102, 241, 0.1);
+  transition: box-shadow 0.3s ease, transform 0.15s ease;
+}
+.btn-glow:hover {
+  box-shadow: 0 0 25px rgba(99, 102, 241, 0.4), 0 0 80px rgba(99, 102, 241, 0.15);
+  transform: translateY(-1px);
+}
+
+.btn-glow-emerald {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.2), 0 0 60px rgba(16, 185, 129, 0.08);
+  transition: box-shadow 0.3s ease, transform 0.15s ease;
+}
+.btn-glow-emerald:hover {
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.35), 0 0 80px rgba(16, 185, 129, 0.12);
+  transform: translateY(-1px);
+}
+
+.textarea-glow:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+.empty-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #27272a 25%, #3f3f46 50%, #27272a 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+
+.spin-slow {
+  animation: spin-slow 2s linear infinite;
+}

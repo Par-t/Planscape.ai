@@ -1,4 +1,4 @@
-# MinUI — Project Plan
+# Planscape.ai — Project Plan
 
 ## Concept
 
