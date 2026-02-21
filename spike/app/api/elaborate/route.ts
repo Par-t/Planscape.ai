@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: "user",
-          content: `You are a project planning assistant. Take this rough plan and make it more elaborate and detailed — expand each step with a brief description of what it involves, add any missing intermediate steps, and clarify dependencies. Keep it concise (no more than 10-12 steps). Return ONLY the elaborated plan as plain text, no markdown headers or bullet formatting — just numbered steps.\n\nPlan:\n${plan}`,
+          content: `Rephrase the following text so that it is easier to convert into a flowchart. Do NOT add, remove, or change any content or steps — only rephrase the wording so that each step is a clear, concise action and dependencies between steps are obvious. Return ONLY the rephrased plan as plain text.\n\nText:\n${plan}`,
         },
       ],
     });

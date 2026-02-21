@@ -50,6 +50,7 @@ export default function Home() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
+  const [checkSummary, setCheckSummary] = useState("");
   const [showAddNode, setShowAddNode] = useState(false);
   const [newNodeLabel, setNewNodeLabel] = useState("");
   const [nodeAnnotations, setNodeAnnotations] = useState<
@@ -211,6 +212,22 @@ export default function Home() {
   });
 
   useCopilotAction({
+    name: "summarizeCheck",
+    description:
+      "Provide a brief overall summary of the check results for the side panel. " +
+      "Summarize what changed in the flowchart, how it affected the flow, and the overall health. " +
+      "Keep it to 2-3 short sentences. Always call this once at the end of your analysis.",
+    parameters: [
+      { name: "summary", type: "string", description: "A brief 2-3 sentence summary of the check results", required: true },
+    ],
+    handler: ({ summary }: { summary: string }) => {
+      console.log(`[summarizeCheck] ${summary}`);
+      setCheckSummary(summary);
+      return `Summary set.`;
+    },
+  });
+
+  useCopilotAction({
     name: "storeMemory",
     description:
       "Store a memory in long-term storage (Redis). Use this to persist analysis summaries " +
@@ -304,6 +321,7 @@ export default function Home() {
     setWarnings([]);
     setSuggestions([]);
     setNodeAnnotations({});
+    setCheckSummary("");
 
     // Reset node styles to default before Claude flags them
     setNodes((prev) => prev.map((n) => ({ ...n, data: { ...n.data, nodeStyle } })));
@@ -315,7 +333,7 @@ export default function Home() {
       await appendMessage(
         new TextMessage({
           role: MessageRole.User,
-          content: `You are a plan dependency analyzer. I have a plan and a dependency graph. I just made edits to the graph. Analyze my changes.
+          content: `You are reviewing edits to a flowchart that represents a project plan. Think of this as a visual flowchart where each box is a step and arrows show what must happen before what.
 
 SESSION ID: ${sessionId}
 CHECK NUMBER: ${checkNum}
@@ -323,10 +341,10 @@ CHECK NUMBER: ${checkNum}
 ORIGINAL PLAN:
 ${planTextRef.current}
 
-PREVIOUS GRAPH:
+PREVIOUS FLOWCHART:
 ${describeGraph(confirmedGraph.current)}
 
-CURRENT GRAPH (after my edits):
+CURRENT FLOWCHART (after edits):
 ${describeGraph(current)}
 
 CHANGES MADE:
@@ -334,12 +352,13 @@ ${changes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
 
 INSTRUCTIONS:
 1. Call searchMemory with query "session ${sessionId} analysis" to check for past context.
-2. Analyze whether my changes break dependencies or create logical problems.
-3. For each affected node, call flagNode with the appropriate status ("ok", "warning", or "error") and a reason.
-4. Call addInsight for each warning or suggestion (max 2 warnings, max 2 suggestions).
-5. Call storeMemory to persist a summary: "Session ${sessionId} Check ${checkNum}: [your summary of what changed and what you flagged]"
-6. If past analysis exists from searchMemory, note repeated patterns and escalate severity.
-7. Do NOT respond with plain text. Only use the tool calls above.`,
+2. Analyze whether the edits break the logical flow of the plan. Think in terms of the flowchart: does the sequence of steps still make sense? Are there steps that now have no path leading to them? Are there steps that lost a prerequisite they need?
+3. For each affected step, call flagNode with the appropriate status ("ok", "warning", or "error") and a SHORT, plain-language reason (1 sentence max). Write reasons as if explaining to a non-technical person looking at a flowchart. Say things like "This step has no arrow leading into it, so nothing triggers it" or "Removing X means Y has no input" — NOT graph theory terms like nodes, leaves, edges, trees, or orphans.
+4. Call addInsight for each warning or suggestion (max 2 each). Keep these practical and flowchart-oriented.
+5. Call summarizeCheck with a brief 2-3 sentence overview of what changed and how it affects the flow.
+6. Call storeMemory to persist a summary: "Session ${sessionId} Check ${checkNum}: [your summary of what changed and what you flagged]"
+7. If past analysis exists from searchMemory, note repeated patterns and escalate severity.
+8. Do NOT respond with plain text. Only use the tool calls above.`,
         })
       );
 
@@ -491,7 +510,7 @@ INSTRUCTIONS:
             disabled={expanding || loading || !planText.trim()}
             className="bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg py-2 text-sm font-medium transition-colors"
           >
-            {expanding ? "Expanding..." : "Expand Plan"}
+            {expanding ? "Rephrasing..." : "Rephrase it"}
           </button>
           <button
             onClick={handleGenerate}
@@ -526,6 +545,7 @@ INSTRUCTIONS:
           checking={checking}
           hasChanges={hasChanges}
           onCheck={handleCheckChanges}
+          summary={checkSummary}
         />
       </div>
     </div>

@@ -128,9 +128,10 @@ export default function GraphView({
       elementsSelectable={true}
       minZoom={0.01}
       deleteKeyCode="Backspace"
+      proOptions={{ hideAttribution: true }}
     >
       <Background color="#27272a" gap={20} />
-      <Controls />
+      <Controls showInteractive={false} />
     </ReactFlow>
   );
 }
