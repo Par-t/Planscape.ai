@@ -3,7 +3,7 @@
 import { memo } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 
-const targetHandleClass = "!opacity-0 !border-none !bg-transparent !w-3 !h-3";
+const targetHandleClass = "target-handle !opacity-0 !border-none !bg-transparent !w-8 !h-8";
 const sourceHandleClass =
   "source-handle !w-4 !h-4 !bg-indigo-500 !border-2 !border-indigo-300 !opacity-0 group-hover:!opacity-100 transition-opacity";
 

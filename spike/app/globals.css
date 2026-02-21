@@ -30,9 +30,22 @@ body {
   pointer-events: all;
 }
 
-/* While a connection is being dragged, make target handles accept drops */
+/* While a connection is being dragged, make target handles visible and accept drops */
 .react-flow__node.connectable .react-flow__handle.target {
   pointer-events: all;
+}
+
+.react-flow.connecting .target-handle {
+  opacity: 1 !important;
+  background: #6366f1 !important;
+  border: 2px solid #a5b4fc !important;
+  border-radius: 50%;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.react-flow.connecting .target-handle:hover {
+  transform: scale(1.4);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.9);
 }
 
 /* Source handle hover glow */

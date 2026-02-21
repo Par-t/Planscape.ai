@@ -258,6 +258,28 @@ export default function Home() {
     },
   });
 
+  const [expanding, setExpanding] = useState(false);
+
+  const handleExpand = async () => {
+    if (!planText.trim()) return;
+    setExpanding(true);
+    try {
+      const res = await fetch("/api/elaborate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: planText }),
+      });
+      const data = await res.json();
+      if (data.ok && data.plan) {
+        setPlanText(data.plan);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setExpanding(false);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!planText.trim()) return;
     setLoading(true);
@@ -371,17 +393,6 @@ INSTRUCTIONS:
         <p className="text-zinc-400 text-sm">Paste a plan, Claude extracts the dependency graph. Edit it, then check your changes.</p>
       </div>
 
-      {/* Toolbar */}
-      <div className="border-b border-zinc-800 px-6 py-2 flex items-center gap-3 bg-zinc-950">
-        <button
-          onClick={() => setShowAddNode(true)}
-          disabled={nodes.length === 0}
-          className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
-        >
-          + Add Node
-        </button>
-      </div>
-
       {/* Add Node Modal */}
       {showAddNode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -476,6 +487,13 @@ INSTRUCTIONS:
             onChange={(e) => setPlanText(e.target.value)}
           />
           <button
+            onClick={handleExpand}
+            disabled={expanding || loading || !planText.trim()}
+            className="bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg py-2 text-sm font-medium transition-colors"
+          >
+            {expanding ? "Expanding..." : "Expand Plan"}
+          </button>
+          <button
             onClick={handleGenerate}
             disabled={loading}
             className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg py-2.5 text-sm font-medium transition-colors"
@@ -484,7 +502,14 @@ INSTRUCTIONS:
           </button>
         </div>
 
-        <div className="flex-1 bg-zinc-900">
+        <div className="flex-1 bg-zinc-900 relative">
+          <button
+            onClick={() => setShowAddNode(true)}
+            disabled={nodes.length === 0}
+            className="absolute top-4 right-4 z-20 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors shadow-lg"
+          >
+            + Add Node
+          </button>
           <GraphView
             nodes={nodes}
             edges={edges}

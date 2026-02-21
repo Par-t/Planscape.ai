@@ -8,7 +8,10 @@
       "Bash(node:*)",
       "Bash(curl:*)",
       "Bash(docker ps:*)",
-      "Bash(docker-compose:*)"
+      "Bash(docker-compose:*)",
+      "Bash(docker exec:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)"
     ]
   }
 }
