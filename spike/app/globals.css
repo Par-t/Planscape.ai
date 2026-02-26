@@ -38,14 +38,16 @@ body {
 .react-flow.connecting .target-handle {
   opacity: 1 !important;
   background: #6366f1 !important;
-  border: 2px solid #a5b4fc !important;
+  border: 3px solid #a5b4fc !important;
   border-radius: 50%;
   transition: opacity 0.15s, transform 0.15s;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.6);
 }
 
 .react-flow.connecting .target-handle:hover {
-  transform: scale(1.4);
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.9);
+  transform: scale(1.5);
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.9);
+  background: #818cf8 !important;
 }
 
 /* Source handle hover glow */

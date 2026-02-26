@@ -21,8 +21,11 @@ export async function POST(req: NextRequest) {
     const text = message.content[0].type === "text" ? message.content[0].text : "";
     return NextResponse.json({ ok: true, plan: text });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    console.error("[elaborate API]", msg);
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    const raw = e instanceof Error ? e.message : String(e);
+    const status = (e as { status?: number }).status;
+    console.error("[elaborate API]", raw);
+    // Pass status code in the message so the client can classify it
+    const error = status ? `${status} ${raw}` : raw;
+    return NextResponse.json({ ok: false, error }, { status: 500 });
   }
 }

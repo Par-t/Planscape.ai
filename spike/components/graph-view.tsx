@@ -142,6 +142,7 @@ export default function GraphView({
       nodesDraggable={true}
       nodesConnectable={true}
       elementsSelectable={true}
+      connectionRadius={80}
       minZoom={0.01}
       deleteKeyCode="Backspace"
       proOptions={{ hideAttribution: true }}

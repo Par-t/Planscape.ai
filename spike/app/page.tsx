@@ -10,6 +10,26 @@ import { applyDagreLayout } from "@/lib/graph-layout";
 import { snapshotFromFlow, diffGraphs, describeGraph, GraphSnapshot } from "@/lib/diff";
 import { v4 as uuidv4 } from "uuid";
 
+function friendlyError(raw?: string): string {
+  const msg = (raw || "").toLowerCase();
+  if (msg.includes("credit") || msg.includes("billing") || msg.includes("402") || msg.includes("payment") || msg.includes("insufficient")) {
+    return "Your Anthropic API credits have run out. Add credits at console.anthropic.com to continue.";
+  }
+  if (msg.includes("rate") || msg.includes("429") || msg.includes("too many")) {
+    return "Too many requests — please wait a moment and try again.";
+  }
+  if (msg.includes("auth") || msg.includes("401") || msg.includes("invalid") && msg.includes("key")) {
+    return "Your API key appears to be invalid. Check ANTHROPIC_API_KEY in .env.local.";
+  }
+  if (msg.includes("overloaded") || msg.includes("529")) {
+    return "Claude is currently overloaded. Try again in a few seconds.";
+  }
+  if (msg.includes("network") || msg.includes("fetch") || msg.includes("econnrefused")) {
+    return "Could not reach the server. Check your internet connection and make sure the dev server is running.";
+  }
+  return "Something went wrong. Check that your API key is valid and you have credits at console.anthropic.com.";
+}
+
 const TEST_PLAN = `We need to collect training data, then clean and preprocess it.
 While that's happening, we can set up the ML infrastructure.
 Once data is ready and infra is up, we train the model.
@@ -63,6 +83,11 @@ export default function Home() {
     status: "ok" | "warning" | "error";
     reasons: string[];
   } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Track whether CopilotKit operations actually produced results
+  const generateSucceededRef = useRef(false);
+  const checkSucceededRef = useRef(false);
 
   const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([]);
   const [historyLen, setHistoryLen] = useState(0);
@@ -95,7 +120,28 @@ export default function Home() {
   const planTextRef = useRef(planText);
   planTextRef.current = planText;
 
-  const { appendMessage } = useCopilotChat();
+  const { appendMessage, isLoading: isCopilotLoading } = useCopilotChat();
+
+  // Track CopilotKit loading transitions to detect when Claude finishes
+  const prevCopilotLoadingRef = useRef(false);
+
+  useEffect(() => {
+    // When CopilotKit transitions from loading → not loading while an
+    // operation is in progress, Claude has finished (or failed silently).
+    if (checking && prevCopilotLoadingRef.current && !isCopilotLoading) {
+      setChecking(false);
+      if (!checkSucceededRef.current) {
+        setError(friendlyError());
+      }
+    }
+    if (loading && prevCopilotLoadingRef.current && !isCopilotLoading) {
+      setLoading(false);
+      if (!generateSucceededRef.current) {
+        setError(friendlyError());
+      }
+    }
+    prevCopilotLoadingRef.current = isCopilotLoading;
+  }, [isCopilotLoading, checking, loading]);
 
   useEffect(() => {
     if (!confirmedGraph.current || nodes.length === 0) return;
@@ -171,24 +217,26 @@ export default function Home() {
       pushHistory();
       setNodes(laid);
       setEdges(flowEdges);
-      setLoading(false);
       setWarnings([]);
       setSuggestions([]);
       setHasChanges(false);
       confirmedGraph.current = snapshotFromFlow(laid, flowEdges);
+      generateSucceededRef.current = true;
     },
   });
 
   useCopilotAction({
     name: "flagNode",
     description:
-      "Flag a node with a status color. Call once per node that needs a status update. " +
-      "'ok' = green (node is fine), 'warning' = amber (potential issue), " +
-      "'error' = red (definite problem). Include a brief reason.",
+      "Mark a project step with a status. Call once per step. " +
+      "'ok' = this step is fine, 'warning' = potential project risk, " +
+      "'error' = this step will fail or is missing something critical. " +
+      "The reason MUST be about the project content — e.g. 'Model training needs clean data but the preprocessing step was removed'. " +
+      "NEVER mention edges, arrows, nodes, graphs, incoming/outgoing connections, or visual structure.",
     parameters: [
-      { name: "nodeId", type: "string", description: "The ID of the node to flag", required: true },
+      { name: "nodeId", type: "string", description: "The ID of the step to mark", required: true },
       { name: "status", type: "string", description: "ok | warning | error", required: true },
-      { name: "reason", type: "string", description: "Brief explanation of why this status was assigned", required: true },
+      { name: "reason", type: "string", description: "Plain-language project reason — what will go wrong or why this step is fine. Never mention edges, arrows, or graph structure.", required: true },
     ],
     handler: ({ nodeId, status: rawStatus, reason }: { nodeId: string; status: string; reason: string }) => {
       const status = rawStatus as "ok" | "warning" | "error";
@@ -226,11 +274,12 @@ export default function Home() {
   useCopilotAction({
     name: "addInsight",
     description:
-      "Add a warning or suggestion to the insight panel. " +
-      "Use 'warning' for problems found, 'suggestion' for helpful observations.",
+      "Add a project-level warning or suggestion. " +
+      "Use 'warning' for real project risks (e.g. 'Skipping testing means bugs will reach production'). " +
+      "Use 'suggestion' for improvements. Write in plain project language — never mention edges, arrows, nodes, or graph terms.",
     parameters: [
       { name: "type", type: "string", description: "warning | suggestion", required: true },
-      { name: "message", type: "string", description: "The insight message to display", required: true },
+      { name: "message", type: "string", description: "A project risk or suggestion in plain language. Never reference graph structure.", required: true },
     ],
     handler: ({ type, message }: { type: string; message: string }) => {
       console.log(`[addInsight] type=${type}, message=${message}`);
@@ -246,15 +295,17 @@ export default function Home() {
   useCopilotAction({
     name: "summarizeCheck",
     description:
-      "Provide a brief overall summary of the check results for the side panel. " +
-      "Summarize what changed in the flowchart, how it affected the flow, and the overall health. " +
-      "Keep it to 2-3 short sentences. Always call this once at the end of your analysis.",
+      "Provide a brief overall summary of the plan review. " +
+      "Summarize what changed in the project plan, whether the plan will still succeed, and any key risks. " +
+      "Write in plain language as if briefing a project manager. Never mention edges, arrows, nodes, or graph terms. " +
+      "Keep it to 2-3 short sentences. Call this FIRST before other tools.",
     parameters: [
-      { name: "summary", type: "string", description: "A brief 2-3 sentence summary of the check results", required: true },
+      { name: "summary", type: "string", description: "A 2-3 sentence project health summary in plain language. No graph/visual terms.", required: true },
     ],
     handler: ({ summary }: { summary: string }) => {
       console.log(`[summarizeCheck] ${summary}`);
       setCheckSummary(summary);
+      checkSucceededRef.current = true;
       return `Summary set.`;
     },
   });
@@ -312,6 +363,7 @@ export default function Home() {
   const handleExpand = async () => {
     if (!planText.trim()) return;
     setExpanding(true);
+    setError(null);
     try {
       const res = await fetch("/api/elaborate", {
         method: "POST",
@@ -321,9 +373,11 @@ export default function Home() {
       const data = await res.json();
       if (data.ok && data.plan) {
         setPlanText(data.plan);
+      } else {
+        setError(friendlyError(data.error));
       }
-    } catch {
-      // silently fail
+    } catch (e) {
+      setError(friendlyError(e instanceof Error ? e.message : String(e)));
     } finally {
       setExpanding(false);
     }
@@ -332,15 +386,22 @@ export default function Home() {
   const handleGenerate = async () => {
     if (!planText.trim()) return;
     setLoading(true);
+    setError(null);
+    generateSucceededRef.current = false;
     setNodes([]);
     setEdges([]);
     confirmedGraph.current = null;
-    await appendMessage(
-      new TextMessage({
-        role: MessageRole.User,
-        content: `Here is the plan to analyze:\n\n${planText}`,
-      })
-    );
+    try {
+      await appendMessage(
+        new TextMessage({
+          role: MessageRole.User,
+          content: `Here is the plan to analyze:\n\n${planText}`,
+        })
+      );
+    } catch (e) {
+      setLoading(false);
+      setError(friendlyError(e instanceof Error ? e.message : String(e)));
+    }
   };
 
   const handleCheckChanges = async () => {
@@ -350,6 +411,8 @@ export default function Home() {
     if (changes.length === 0) return;
 
     setChecking(true);
+    setError(null);
+    checkSucceededRef.current = false;
     setWarnings([]);
     setSuggestions([]);
     setNodeAnnotations({});
@@ -365,42 +428,34 @@ export default function Home() {
       await appendMessage(
         new TextMessage({
           role: MessageRole.User,
-          content: `You are reviewing edits to a flowchart that represents a project plan. Think of this as a visual flowchart where each box is a step and arrows show what must happen before what.
+          content: `Review these project plan changes. Respond ONLY with tool calls, no text.
 
-SESSION ID: ${sessionId}
-CHECK NUMBER: ${checkNum}
+PLAN: ${planTextRef.current}
 
-ORIGINAL PLAN:
-${planTextRef.current}
+BEFORE: ${describeGraph(confirmedGraph.current)}
 
-PREVIOUS FLOWCHART:
-${describeGraph(confirmedGraph.current)}
+AFTER: ${describeGraph(current)}
 
-CURRENT FLOWCHART (after edits):
-${describeGraph(current)}
+CHANGES: ${changes.join("; ")}
 
-CHANGES MADE:
-${changes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
-
-INSTRUCTIONS:
-1. Call searchMemory with query "session ${sessionId} analysis" to check for past context.
-2. Analyze whether the edits break the logical flow of the plan. Think in terms of the flowchart: does the sequence of steps still make sense? Are there steps that now have no path leading to them? Are there steps that lost a prerequisite they need?
-3. For each affected step, call flagNode with the appropriate status ("ok", "warning", or "error") and a SHORT, plain-language reason (1 sentence max). Write reasons as if explaining to a non-technical person looking at a flowchart. Say things like "This step has no arrow leading into it, so nothing triggers it" or "Removing X means Y has no input" — NOT graph theory terms like nodes, leaves, edges, trees, or orphans.
-4. Call addInsight for each warning or suggestion (max 2 each). Keep these practical and flowchart-oriented.
-5. Call summarizeCheck with a brief 2-3 sentence overview of what changed and how it affects the flow.
-6. Call storeMemory to persist a summary: "Session ${sessionId} Check ${checkNum}: [your summary of what changed and what you flagged]"
-7. If past analysis exists from searchMemory, note repeated patterns and escalate severity.
-8. Do NOT respond with plain text. Only use the tool calls above.`,
+Do these in order:
+1. summarizeCheck — 2 sentences: what changed + will the plan still work?
+2. flagNode for each step — status (ok/warning/error) + 1-sentence reason about the PROJECT (e.g. "Training will fail without clean data"). NEVER mention arrows, edges, nodes, graphs, or visual structure.
+3. addInsight — max 1 warning and 1 suggestion as project risks.
+4. storeMemory — "Session ${sessionId} Check ${checkNum}: [your summary]"`,
         })
       );
 
       confirmedGraph.current = current;
       setHasChanges(false);
-    } catch {
-      setWarnings(["Failed to reach Claude. Is the server running?"]);
-    } finally {
+    } catch (e) {
+      setError(friendlyError(e instanceof Error ? e.message : String(e)));
       setChecking(false);
     }
+    // NOTE: setChecking(false) is NOT called here on success.
+    // The useEffect watching isCopilotLoading handles it — it waits
+    // for Claude to finish all tool calls (flagNode, summarizeCheck, etc.)
+    // before turning off the checking state.
   };
 
   const handleAddNode = () => {
@@ -582,6 +637,25 @@ INSTRUCTIONS:
         </div>
 
         <div className="flex-1 bg-zinc-900 relative">
+          {error && (
+            <div className="absolute top-4 left-4 right-4 z-30 bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3 backdrop-blur-sm animate-in fade-in">
+              <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <p className="flex-1 text-sm text-red-200 leading-relaxed">{error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="text-red-400 hover:text-red-200 transition-colors flex-shrink-0"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          )}
           <div className="absolute top-4 right-4 z-20 flex gap-2">
             {historyLen > 0 && (
               <button
@@ -622,6 +696,7 @@ INSTRUCTIONS:
           hasChanges={hasChanges}
           onCheck={handleCheckChanges}
           summary={checkSummary}
+          error={error}
         />
       </div>
     </div>

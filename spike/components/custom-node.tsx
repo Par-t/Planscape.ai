@@ -3,9 +3,9 @@
 import { memo } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 
-const targetHandleClass = "target-handle !opacity-0 !border-none !bg-transparent !w-8 !h-8";
+const targetHandleClass = "target-handle !opacity-0 !border-none !bg-transparent !w-12 !h-12";
 const sourceHandleClass =
-  "source-handle !w-4 !h-4 !bg-indigo-500 !border-2 !border-indigo-300 !opacity-0 group-hover:!opacity-100 transition-opacity";
+  "source-handle !w-6 !h-6 !bg-indigo-500 !border-2 !border-indigo-300 !opacity-30 group-hover:!opacity-100 transition-opacity";
 
 const dotColors: Record<string, string> = {
   error: "#ef4444",
